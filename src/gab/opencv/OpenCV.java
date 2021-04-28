@@ -62,10 +62,12 @@ import org.opencv.core.Point;
 import org.opencv.calib3d.Calib3d;
 import org.opencv.core.CvException;
 import org.opencv.core.Core.MinMaxLocResult;
-import org.opencv.video.BackgroundSubtractorMOG;
+import org.opencv.video.BackgroundSubtractor;
+import org.opencv.video.BackgroundSubtractorMOG2;
 import org.opencv.objdetect.CascadeClassifier;
 import org.opencv.imgproc.Imgproc;
 
+import org.opencv.video.Video;
 import processing.core.*;
 
 /**
@@ -113,7 +115,7 @@ public class OpenCV {
 	private boolean isArm = false;
 	
 	public CascadeClassifier classifier;
-	BackgroundSubtractorMOG backgroundSubtractor;
+	BackgroundSubtractorMOG2 backgroundSubtractor;
 	public Flow flow;
 
 	public final static String VERSION = "##library.prettyVersion##";
@@ -363,113 +365,14 @@ public class OpenCV {
     private void setupWorkingImages(){
 		outputImage = parent.createImage(width,height, PConstants.ARGB);
     }
-    
-    private String getLibPath() {
-        URL url = this.getClass().getResource("OpenCV.class");
-        if (url != null) {
-          // Convert URL to string, taking care of spaces represented by the "%20"
-          // string.
-          String path = url.toString().replace("%20", " ");
-          int n0 = path.indexOf('/');
 
-          int n1 = -1;
-            
-
-          n1 = path.indexOf("opencv_processing.jar");
-          if (PApplet.platform == PConstants.WINDOWS) { //platform Windows
-            // In Windows, path string starts with "jar file/C:/..."
-            // so the substring up to the first / is removed.
-            n0++;
-          }
-
-
-          if ((-1 < n0) && (-1 < n1)) {
-            return path.substring(n0, n1);
-          } else {
-            return "";
-          }
-        }
-        return "";
-      }
     
     private void initNative(){
     	if(!nativeLoaded){
-    		int bitsJVM = PApplet.parseInt(System.getProperty("sun.arch.data.model"));
-    		
-    		String osArch = System.getProperty("os.arch");
-    		
-	    	String nativeLibPath = getLibPath();
-	    	
-	    	String path = null;
-
-	    	// determine the path to the platform-specific opencv libs
-	    	if (PApplet.platform == PConstants.WINDOWS) { //platform Windows
-	    		path = nativeLibPath + "windows" + bitsJVM;
-	    	}
-	    	if (PApplet.platform == PConstants.MACOSX) { //platform Mac
-	    		path = nativeLibPath + "macosx" + bitsJVM;
-	    	}
-	    	if (PApplet.platform == PConstants.LINUX) { //platform Linux
-	    		// attempt to detect arm architecture - is it fair to assume linux for ARM devices?
-	    		isArm = osArch.contains("arm");
-			// armv6hf as found on the Raspberry Pi is the lowest architecture supported by Processing
-			// in the future we'll have runtime-detection of armv7 systems, and use the optimized library on those
-    			path = isArm ? nativeLibPath + "linux-armv6hf" : nativeLibPath + "linux" + bitsJVM;
-	    	}
-	    	
-	    	// ensure the determined path exists
-	    	try {
-	    		File libDir = new File(path);
-	    		if (libDir.exists()) {
-	    			nativeLibPath = path; 
-	    		}
-	    	} catch (NullPointerException e) {
-	    		// platform couldn't be determined
-	    		System.err.println("Cannot load local version of opencv_java245  : Linux 32/64, arm7, Windows 32 bits or Mac Os 64 bits are only avaible");
-	    		e.printStackTrace();
-	    	}
-	    	
-	    	// this check might be redundant now...
-	    	if((PApplet.platform == PConstants.MACOSX && bitsJVM == 64) || (PApplet.platform == PConstants.WINDOWS) || (PApplet.platform == PConstants.LINUX)){
-		    	try {
-					addLibraryPath(nativeLibPath);
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-		    	System.loadLibrary("opencv_java245");
-	    	}
-	    	else{
-	    		 System.err.println("Cannot load local version of opencv_java245  : Linux 32/64, Windows 32 bits or Mac Os 64 bits are only avaible");
-	    	}
-	    	
+			System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
 	    	nativeLoaded = true;
     	}
-    }
-    
-
-    private void addLibraryPath(String path) throws Exception {
-        String originalPath = System.getProperty("java.library.path");
-        
-        // If this is an arm device running linux, Processing seems to include the linux32 dirs in the path,
-        // which conflict with the arm-specific libs. To fix this, we remove the linux32 segments from the path.
-        //
-        // Alternatively, we could do one of the following:
-        // 		A) prepend to the path instead of append, forcing our libs to be used
-        // 		B) rename the libopencv_java245 in the arm7 dir and add logic to load it instead above in System.loadLibrary(...)
-        
-        if (isArm) {
-        	if (originalPath.indexOf("linux32") != -1) {
-        		originalPath = originalPath.replaceAll(":[^:]*?linux32", "");
-        	}
-        }
-        
-    	System.setProperty("java.library.path", originalPath +System.getProperty("path.separator")+ path);
-     
-        //set sys_paths to null
-        final Field sysPathsField = ClassLoader.class.getDeclaredField("sys_paths");
-        sysPathsField.setAccessible(true);
-        sysPathsField.set(null, null);
-    }
+	}
 
 	/**
 	 * Load a cascade file for face or object detection.
@@ -508,7 +411,7 @@ public class OpenCV {
 
 		// localize path to cascade file to point at the library's data folder
 		String relativePath = "cascade-files/" + cascadeFileName;
-		String cascadePath = getLibPath();
+		String cascadePath = relativePath; // getLibPath();
 		cascadePath += relativePath;
 				
 		PApplet.println("Load cascade from: " + cascadePath);
@@ -556,7 +459,7 @@ public class OpenCV {
 	 * Especially useful when working with
 	 * classifier.detectMultiScale().
 	 *
-	 * @param Rect[] rects
+	 * @param rects
 	 * 
 	 * @return 
 	 *  A Rectangle[] of java.awt.Rectangle
@@ -621,7 +524,11 @@ public class OpenCV {
 	 * @param backgroundRatio
 	 */
 	public void startBackgroundSubtraction(int history, int nMixtures, double backgroundRatio){
-		backgroundSubtractor = new BackgroundSubtractorMOG(history, nMixtures, backgroundRatio);
+		backgroundSubtractor = Video.createBackgroundSubtractorMOG2();
+
+		backgroundSubtractor.setHistory(history);
+		backgroundSubtractor.setNMixtures(nMixtures);
+		backgroundSubtractor.setBackgroundRatio(backgroundRatio);
 	}
 	
 	/**
@@ -1084,16 +991,26 @@ public class OpenCV {
 	 * 		By default this will normalize the histogram (scale the values to 0.0-1.0). Pass false as the third argument to keep values unormalized.
 	 * @param numBins 
 	 * 		The number of bins into which divide the histogram should be divided.
-	 * @param normalize (optional)
-	 * 		Whether or not to normalize the histogram (scale the values to 0.0-1.0). Defaults to true.
 	 * @return
 	 * 		A Histogram object that you can call draw() on.
 	 */
 	public Histogram findHistogram(Mat mat, int numBins){
 		return findHistogram(mat, numBins, true);
 	}
-	
-	
+
+
+	/**
+	 *
+	 * @param mat
+	 * 		The mat from which to calculate the histogram. Get this from getGray(), getR(), getG(), getB(), etc..
+	 * 		By default this will normalize the histogram (scale the values to 0.0-1.0). Pass false as the third argument to keep values unormalized.
+	 * @param numBins
+	 * 		The number of bins into which divide the histogram should be divided.
+	 * @param normalize (optional)
+	 * 		Whether or not to normalize the histogram (scale the values to 0.0-1.0). Defaults to true.
+	 * @return
+	 * 		A Histogram object that you can call draw() on.
+	 */
 	public Histogram findHistogram(Mat mat, int numBins, boolean normalize){
 		
 		MatOfInt channels = new MatOfInt(0);
@@ -1297,9 +1214,11 @@ public class OpenCV {
 	 * 		The Mat to receive the image data.
 	 */	
 	public static void toCv(PImage img, Mat m){
-		BufferedImage image = (BufferedImage)img.getNative();
-		int[] matPixels = ((DataBufferInt)image.getRaster().getDataBuffer()).getData();
-		
+//		BufferedImage image = (BufferedImage)img.getNative();
+//		int[] matPixels = ((DataBufferInt)image.getRaster().getDataBuffer()).getData();
+
+		int[] matPixels = img.pixels;
+
 		ByteBuffer bb = ByteBuffer.allocate(matPixels.length * 4);
 		IntBuffer ib = bb.asIntBuffer();
 		ib.put(matPixels);
