@@ -29,21 +29,10 @@
 
 package gab.opencv;
 
-import gab.opencv.Contour;
-import gab.opencv.ContourComparator;
-import gab.opencv.Histogram;
-import gab.opencv.Line;
-import gab.opencv.Flow;
-
 import java.awt.Rectangle;
-import java.awt.image.BufferedImage;
-import java.awt.image.DataBufferInt;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
-import java.io.File;
-import java.lang.reflect.Field;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 
@@ -115,7 +104,7 @@ public class OpenCV {
 	private boolean isArm = false;
 	
 	public CascadeClassifier classifier;
-	BackgroundSubtractorMOG2 backgroundSubtractor;
+	BackgroundSubtractor backgroundSubtractor;
 	public Flow flow;
 
 	public final static String VERSION = "##library.prettyVersion##";
@@ -524,11 +513,17 @@ public class OpenCV {
 	 * @param backgroundRatio
 	 */
 	public void startBackgroundSubtraction(int history, int nMixtures, double backgroundRatio){
-		backgroundSubtractor = Video.createBackgroundSubtractorMOG2();
+		final BackgroundSubtractorMOG2 mog2 = Video.createBackgroundSubtractorMOG2();
 
-		backgroundSubtractor.setHistory(history);
-		backgroundSubtractor.setNMixtures(nMixtures);
-		backgroundSubtractor.setBackgroundRatio(backgroundRatio);
+		mog2.setHistory(history);
+		mog2.setNMixtures(nMixtures);
+		mog2.setBackgroundRatio(backgroundRatio);
+
+		backgroundSubtractor = mog2;
+	}
+
+	public void startBackgroundSubtractionKNN(int history) {
+		backgroundSubtractor = Video.createBackgroundSubtractorKNN(history);
 	}
 	
 	/**
